@@ -30,7 +30,11 @@ func RenderState(g *Game, hideDealerHole bool) string {
 			sb.WriteString(fmt.Sprintf(" (%d)", g.DealerHand.Value()))
 		}
 	}
-	sb.WriteString(strings.Repeat(" ", 40-len(sb.String())+1))
+	// Pad to column width (41 chars total including closing |)
+	lineLen := len(sb.String()) - strings.LastIndex(sb.String(), "\n") - 1
+	if lineLen < 41 {
+		sb.WriteString(strings.Repeat(" ", 41-lineLen))
+	}
 	sb.WriteString("|\n")
 
 	// Render player hands
