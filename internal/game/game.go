@@ -48,22 +48,22 @@ const (
 
 // Game represents the game state
 type Game struct {
-	Bank        int
-	Deck        []Card
-	PlayerHands []*Hand
-	DealerHand  *Hand
-	CurrentPhase Phase
-	ActiveHandIndex int
-	RNG         *rand.Rand
+	Bank               int
+	Deck               []Card
+	PlayerHands        []*Hand
+	DealerHand         *Hand
+	CurrentPhase       Phase
+	ActiveHandIndex    int
+	RNG                *rand.Rand
 	DealerHasBlackjack bool
-	InsuranceOffered bool
+	InsuranceOffered   bool
 }
 
 // NewGame creates a new game with the starting bank
 func NewGame() *Game {
 	return &Game{
-		Bank:        StartingBank,
-		RNG:         NewRand(),
+		Bank:         StartingBank,
+		RNG:          NewRand(),
 		CurrentPhase: PhaseBetting,
 	}
 }
@@ -80,10 +80,10 @@ func (g *Game) StartHand(bet int) error {
 	// Create new deck and shuffle (unless one is already set for testing)
 	if len(g.Deck) == 0 {
 		if os.Getenv("BLACKJACK_SEEDED") == "1" {
-			// Load from testdata file
-			deck, err := LoadShoeFromFile("internal/game/testdata/seeded_shoe.txt")
+			// Load from embedded testdata file
+			deck, err := LoadShoeFromEmbedded()
 			if err != nil {
-				// Fallback to regular shuffled deck if file doesn't exist
+				// Fallback to regular shuffled deck if loading fails
 				g.Deck = NewDeck()
 				Shuffle(g.Deck, g.RNG)
 			} else {
@@ -108,10 +108,23 @@ func (g *Game) StartHand(bet int) error {
 	g.dealCard(g.PlayerHands[0])
 	g.dealCard(g.DealerHand)
 
-	// Check if insurance should be offered
-	if g.DealerHand.Cards[0].IsAce() {
-		g.CurrentPhase = PhaseInsurance
-		g.InsuranceOffered = true
+	// Check if insurance should be offered (based on visible upcard)
+	if len(g.DealerHand.Cards) >= 2 {
+		upcard := g.DealerHand.Cards[1]
+		if upcard.IsAce() {
+			g.CurrentPhase = PhaseInsurance
+			g.InsuranceOffered = true
+		} else {
+			// Peek for blackjack if dealer shows 10
+			if g.DealerHand.Cards[0].Rank.Value() == 10 {
+				if PeekForBlackjack(g.DealerHand.Cards[0], g.DealerHand.Cards[1]) {
+					g.DealerHasBlackjack = true
+					g.CurrentPhase = PhaseResolution
+					return nil
+				}
+			}
+			g.CurrentPhase = PhasePlayerAction
+		}
 	} else {
 		// Peek for blackjack if dealer shows 10
 		if g.DealerHand.Cards[0].Rank.Value() == 10 {
@@ -136,9 +149,6 @@ func (g *Game) TakeInsurance(insuranceBet int) error {
 	maxInsurance := g.PlayerHands[0].Bet / 2
 	if insuranceBet > maxInsurance {
 		return fmt.Errorf("insurance bet cannot exceed half of original bet (%d)", maxInsurance)
-	}
-	if insuranceBet > g.Bank {
-		return fmt.Errorf("insurance bet exceeds bank balance")
 	}
 
 	g.PlayerHands[0].InsuranceBet = insuranceBet
@@ -203,6 +213,11 @@ func (g *Game) hit(hand *Hand) error {
 	hand.IsInitialDeal = false
 	g.dealCard(hand)
 
+	// Automatically stand on 21
+	if hand.Value() == 21 {
+		return g.advanceToNextHand()
+	}
+
 	if hand.IsBust() {
 		// Move to next hand or dealer
 		return g.advanceToNextHand()
@@ -229,10 +244,16 @@ func (g *Game) double(hand *Hand) error {
 	if hand.Bet > g.Bank {
 		return fmt.Errorf("insufficient funds to double")
 	}
+	g.Bank -= hand.Bet // Deduct the additional bet for doubling
 	g.Bank -= hand.Bet
 	hand.Bet *= 2
 	hand.Doubled = true
 	hand.IsInitialDeal = false
+
+	// Check for blackjack on initial deal before doubling
+	if hand.IsBlackjack() {
+		return g.advanceToNextHand()
+	}
 
 	// Deal one card and stand
 	g.dealCard(hand)
@@ -256,6 +277,7 @@ func (g *Game) split() error {
 	if hand.Bet > g.Bank {
 		return fmt.Errorf("insufficient funds to split")
 	}
+	g.Bank -= hand.Bet // Deduct the bet for the new hand
 
 	// Check if we've reached the max of 4 hands
 	if len(g.PlayerHands) >= 4 {
@@ -294,7 +316,7 @@ func (g *Game) split() error {
 	// We need to advance past BOTH hands since both get only one card
 	if hand.IsSplitAces {
 		// Advance past both aces hands
-		g.advanceToNextHand() // Advance from first aces hand
+		g.advanceToNextHand()        // Advance from first aces hand
 		return g.advanceToNextHand() // Advance from second aces hand (triggers dealer)
 	}
 
@@ -318,7 +340,7 @@ func (g *Game) advanceToNextHand() error {
 	if g.ActiveHandIndex >= len(g.PlayerHands) {
 		// All player hands done, move to dealer
 		g.CurrentPhase = PhaseDealerAction
-		g.playDealer()
+		g.PlayDealer()
 		g.CurrentPhase = PhaseResolution
 		g.resolvePayouts()
 	}
@@ -326,7 +348,8 @@ func (g *Game) advanceToNextHand() error {
 	return nil
 }
 
-func (g *Game) playDealer() {
+// PlayDealer plays out the dealer's hand according to house rules
+func (g *Game) PlayDealer() {
 	// Check if all player hands are bust or surrendered
 	allBustOrSurrendered := true
 	for _, hand := range g.PlayerHands {
@@ -350,38 +373,43 @@ func (g *Game) playDealer() {
 }
 
 func (g *Game) resolvePayouts() {
-	totalDelta := 0
+	// Start with the current bank, which no longer includes the bets (already deducted)
+	finalBank := g.Bank
 
 	for _, hand := range g.PlayerHands {
 		// Resolve insurance bet
 		if hand.InsuranceBet > 0 {
 			if g.DealerHasBlackjack {
 				// Insurance pays 2:1
-				totalDelta += Payout(OutcomeWin, hand.InsuranceBet, true)
+				finalBank += Payout(OutcomeWin, hand.InsuranceBet, true)
 			} else {
 				// Insurance loses
-				totalDelta += Payout(OutcomeLose, hand.InsuranceBet, true)
+				finalBank += Payout(OutcomeLose, hand.InsuranceBet, true)
 			}
 		}
 
 		// If dealer has blackjack
 		if g.DealerHasBlackjack {
 			if hand.IsBlackjack() {
-				// Push
-				totalDelta += Payout(OutcomePush, hand.Bet, false)
+				// Push - bet is returned
+				finalBank += hand.Bet
 			} else {
-				// Player loses
-				totalDelta += Payout(OutcomeLose, hand.Bet, false)
+				// Player loses bet (already deducted, so nothing to add back)
 			}
 			continue
 		}
 
 		// Determine outcome
 		outcome := DetermineOutcome(hand, g.DealerHand)
-		totalDelta += Payout(outcome, hand.Bet, false)
+		payout := Payout(outcome, hand.Bet, false)
+
+		// The payout function returns the total amount given to the player.
+		// Since the bet was already deducted from the bank, we add back the full payout.
+		finalBank += payout
 	}
 
-	g.Bank += totalDelta
+	// Update the bank with the final calculated value
+	g.Bank = finalBank
 
 	if g.Bank <= 0 {
 		g.CurrentPhase = PhaseGameOver
@@ -412,6 +440,11 @@ func (g *Game) GetAvailableActions() []Action {
 
 	// If hand is bust, no actions available
 	if hand.IsBust() {
+		return nil
+	}
+
+	// If hand is 21, no actions available (auto-stand)
+	if hand.Value() == 21 {
 		return nil
 	}
 

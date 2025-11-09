@@ -2,9 +2,9 @@ package game
 
 // Game rules constants
 const (
-	DealerStandsSoft17 = true  // S17 rule
-	BlackjackPayout    = 1.5   // 3:2 payout
-	InsurancePayout    = 2.0   // 2:1 payout
+	DealerStandsSoft17 = true // S17 rule
+	BlackjackPayout    = 1.5  // 3:2 payout
+	InsurancePayout    = 2.0  // 2:1 payout
 	MinBet             = 1
 	StartingBank       = 1000
 )
@@ -50,7 +50,7 @@ func Payout(outcome Outcome, bet int, isInsurance bool) int {
 	switch outcome {
 	case OutcomeBlackjack:
 		// Natural blackjack pays 3:2 (bet + 1.5x bet)
-		return bet + int(float64(bet)*BlackjackPayout)
+		return int(float64(bet) * (1 + BlackjackPayout))
 	case OutcomeWin:
 		// Regular win pays 1:1 (bet + bet)
 		return bet + bet

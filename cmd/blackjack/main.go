@@ -41,27 +41,47 @@ func main() {
 
 		// Insurance phase
 		if g.CurrentPhase == game.PhaseInsurance {
-			takeInsurance, err := game.PromptYesNo(os.Stdin, "Dealer shows Ace. Take insurance?")
-			if err != nil {
-				fmt.Printf("Error reading input: %v\n", err)
-				continue
+			dealerCard := g.DealerHand.Cards[1]
+			maxInsurance := bet / 2
+			if maxInsurance > g.Bank {
+				maxInsurance = g.Bank
 			}
 
-			if takeInsurance {
-				maxInsurance := bet / 2
-				insuranceBet, err := game.PromptInsurance(os.Stdin, maxInsurance)
+			if maxInsurance == 0 {
+				err = g.DeclineInsurance()
 				if err != nil {
-					fmt.Printf("Error reading insurance bet: %v\n", err)
+					fmt.Printf("Error declining insurance: %v\n", err)
+					continue
+				}
+			} else {
+				prompt := fmt.Sprintf("Dealer shows %s. Take insurance?", dealerCard.String())
+				takeInsurance, err := game.PromptYesNo(os.Stdin, prompt)
+				if err != nil {
+					fmt.Printf("Error reading input: %v\n", err)
 					continue
 				}
 
-				if insuranceBet > 0 {
-					g.Bank -= insuranceBet
-					err = g.TakeInsurance(insuranceBet)
+				if takeInsurance {
+					insuranceBet, err := game.PromptInsurance(os.Stdin, maxInsurance)
 					if err != nil {
-						fmt.Printf("Error taking insurance: %v\n", err)
-						g.Bank += insuranceBet // Refund
+						fmt.Printf("Error reading insurance bet: %v\n", err)
 						continue
+					}
+
+					if insuranceBet > 0 {
+						g.Bank -= insuranceBet
+						err = g.TakeInsurance(insuranceBet)
+						if err != nil {
+							fmt.Printf("Error taking insurance: %v\n", err)
+							g.Bank += insuranceBet // Refund
+							continue
+						}
+					} else {
+						err = g.DeclineInsurance()
+						if err != nil {
+							fmt.Printf("Error declining insurance: %v\n", err)
+							continue
+						}
 					}
 				} else {
 					err = g.DeclineInsurance()
@@ -69,12 +89,6 @@ func main() {
 						fmt.Printf("Error declining insurance: %v\n", err)
 						continue
 					}
-				}
-			} else {
-				err = g.DeclineInsurance()
-				if err != nil {
-					fmt.Printf("Error declining insurance: %v\n", err)
-					continue
 				}
 			}
 		}
@@ -91,17 +105,21 @@ func main() {
 			continue
 		}
 
+		// Check for player blackjack and skip to dealer
+		if g.PlayerHands[0].IsBlackjack() {
+			fmt.Println("\n🃏 Blackjack!")
+			// Skip player action and go straight to dealer
+			for g.CurrentPhase == game.PhasePlayerAction {
+				g.PlayerAction(game.ActionStand)
+			}
+		}
+
 		// Player action phase
 		for g.CurrentPhase == game.PhasePlayerAction {
 			currentHand := g.GetCurrentHand()
 			if currentHand == nil {
 				break
 			}
-
-			// Show current state
-			fmt.Println()
-			fmt.Println(game.RenderState(g, true))
-			fmt.Println()
 
 			// Check if hand is automatically done (split aces with one card dealt)
 			if currentHand.IsSplitAces && len(currentHand.Cards) > 1 {
@@ -111,6 +129,9 @@ func main() {
 					fmt.Printf("Error: %v\n", err)
 					break
 				}
+				fmt.Println()
+				fmt.Println(game.RenderState(g, true))
+				fmt.Println()
 				continue
 			}
 
@@ -122,6 +143,9 @@ func main() {
 					fmt.Printf("Error: %v\n", err)
 					break
 				}
+				fmt.Println()
+				fmt.Println(game.RenderState(g, true))
+				fmt.Println()
 				continue
 			}
 
@@ -145,11 +169,13 @@ func main() {
 				continue
 			}
 
-			// Show result of action
+			// Show board after action
+			fmt.Println()
+			fmt.Println(game.RenderState(g, true))
+			fmt.Println()
+
+			// Show result of action (bust)
 			if action == game.ActionHit && currentHand.IsBust() {
-				fmt.Println()
-				fmt.Println(game.RenderState(g, true))
-				fmt.Println()
 				fmt.Println("💥 BUST!")
 			}
 		}

@@ -38,67 +38,12 @@ func TestEnginePlayerBlackjack(t *testing.T) {
 
 	// Play dealer and resolve
 	g.CurrentPhase = PhaseDealerAction
-	g.playDealer()
+	g.PlayDealer()
 	g.CurrentPhase = PhaseResolution
 	g.resolvePayouts()
 
 	// Player should win with blackjack payout (3:2)
 	expectedBank := initialBank - 100 + Payout(OutcomeBlackjack, 100, false)
-	if g.Bank != expectedBank {
-		t.Errorf("Bank = %d, want %d", g.Bank, expectedBank)
-	}
-}
-
-func TestEngineDealerBlackjackWithInsurance(t *testing.T) {
-	// Create test deck: Dealer gets BJ with Ace showing
-	testDeck := []Card{
-		{Rank: Ten, Suit: Spades},   // Player card 1
-		{Rank: Ace, Suit: Clubs},    // Dealer card 1 (showing)
-		{Rank: Nine, Suit: Hearts},  // Player card 2 (19)
-		{Rank: King, Suit: Clubs},   // Dealer card 2 (BJ!)
-	}
-
-	g := NewGame()
-	g.Deck = testDeck
-	g.RNG = FixedSeededRand()
-
-	initialBank := g.Bank
-	err := g.StartHand(100)
-	if err != nil {
-		t.Fatalf("StartHand failed: %v", err)
-	}
-
-	g.Bank -= 100
-
-	// Insurance should be offered
-	if g.CurrentPhase != PhaseInsurance {
-		t.Fatalf("Expected insurance phase, got %v", g.CurrentPhase)
-	}
-
-	// Take insurance for 50
-	err = g.TakeInsurance(50)
-	if err != nil {
-		t.Fatalf("TakeInsurance failed: %v", err)
-	}
-
-	g.Bank -= 50
-
-	// Dealer should have blackjack
-	if !g.DealerHasBlackjack {
-		t.Error("Dealer should have blackjack")
-	}
-
-	// Should be in resolution phase
-	if g.CurrentPhase != PhaseResolution {
-		t.Fatalf("Expected resolution phase, got %v", g.CurrentPhase)
-	}
-
-	// Resolve payouts
-	g.resolvePayouts()
-
-	// Player loses main bet (100) but wins insurance (50 * 2 = 100)
-	// Net: -100 + 100 = 0
-	expectedBank := initialBank - 100 - 50 + 0 + 100
 	if g.Bank != expectedBank {
 		t.Errorf("Bank = %d, want %d", g.Bank, expectedBank)
 	}

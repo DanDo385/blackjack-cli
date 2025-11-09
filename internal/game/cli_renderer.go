@@ -64,13 +64,6 @@ func RenderState(g *Game, hideDealerHole bool) string {
 		sb.WriteString("|\n")
 	}
 
-	// Render bank and bet info
-	sb.WriteString(fmt.Sprintf("| Bank: %-10d", g.Bank))
-	if len(g.PlayerHands) > 0 {
-		sb.WriteString(fmt.Sprintf(" Bet: %-10d", g.PlayerHands[0].Bet))
-	}
-	sb.WriteString("       |\n")
-
 	sb.WriteString("+------------------------------------------+")
 
 	return sb.String()
