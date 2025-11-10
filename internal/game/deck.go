@@ -1,16 +1,8 @@
 package game
 
 import (
-	"bufio"
-	_ "embed"
-	"fmt"
 	"math/rand"
-	"os"
-	"strings"
 )
-
-//go:embed testdata/seeded_shoe.txt
-var seededShoeData string
 
 // NewDeck creates a standard 52-card deck
 func NewDeck() []Card {
@@ -46,57 +38,3 @@ func Draw(deck []Card, n int) ([]Card, []Card) {
 	return drawn, remaining
 }
 
-// LoadShoeFromFile loads a shoe from a file for deterministic testing
-// File format: one card per line, e.g., "AS", "KD", "3H"
-func LoadShoeFromFile(path string) ([]Card, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	var cards []Card
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		card, err := ParseCard(line)
-		if err != nil {
-			return nil, fmt.Errorf("invalid card in file: %s", line)
-		}
-		cards = append(cards, card)
-	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-
-	return cards, nil
-}
-
-// LoadShoeFromEmbedded loads the embedded seeded shoe file
-func LoadShoeFromEmbedded() ([]Card, error) {
-	var cards []Card
-	scanner := bufio.NewScanner(strings.NewReader(seededShoeData))
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		card, err := ParseCard(line)
-		if err != nil {
-			return nil, fmt.Errorf("invalid card in file: %s", line)
-		}
-		cards = append(cards, card)
-	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-
-	return cards, nil
-}

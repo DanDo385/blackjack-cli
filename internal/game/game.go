@@ -3,7 +3,6 @@ package game
 import (
 	"fmt"
 	"math/rand"
-	"os"
 )
 
 // Action represents a player action
@@ -79,20 +78,8 @@ func (g *Game) StartHand(bet int) error {
 
 	// Create new deck and shuffle (unless one is already set for testing)
 	if len(g.Deck) == 0 {
-		if os.Getenv("BLACKJACK_SEEDED") == "1" {
-			// Load from embedded testdata file
-			deck, err := LoadShoeFromEmbedded()
-			if err != nil {
-				// Fallback to regular shuffled deck if loading fails
-				g.Deck = NewDeck()
-				Shuffle(g.Deck, g.RNG)
-			} else {
-				g.Deck = deck
-			}
-		} else {
-			g.Deck = NewDeck()
-			Shuffle(g.Deck, g.RNG)
-		}
+		g.Deck = NewDeck()
+		Shuffle(g.Deck, g.RNG)
 	}
 
 	// Initialize hands
