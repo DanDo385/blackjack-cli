@@ -82,7 +82,7 @@ func RenderCurrentHand(g *Game) string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Playing Hand %d of %d\n", handNum, totalHands))
 	sb.WriteString(fmt.Sprintf("Current cards: %s\n", hand.String()))
-	
+
 	if hand.IsBust() {
 		sb.WriteString("Current hand value: BUST")
 	} else {

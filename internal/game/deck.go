@@ -37,4 +37,3 @@ func Draw(deck []Card, n int) ([]Card, []Card) {
 	remaining := deck[n:]
 	return drawn, remaining
 }
-

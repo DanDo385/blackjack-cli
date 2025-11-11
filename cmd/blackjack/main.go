@@ -40,7 +40,6 @@ func main() {
 		// This allows the doubling check to see the full bank balance
 		g.Bank -= bet
 
-	
 		// Insurance phase
 		if g.CurrentPhase == game.PhaseInsurance {
 			dealerCard := g.DealerHand.Cards[1]
@@ -144,7 +143,7 @@ func main() {
 				fmt.Println()
 				fmt.Println(game.RenderState(g, true))
 				fmt.Println()
-				
+
 				// Advance to next hand
 				err := g.PlayerAction(game.ActionStand)
 				if err != nil {
@@ -172,7 +171,7 @@ func main() {
 					fmt.Println()
 					fmt.Println(game.RenderState(g, true))
 					fmt.Println()
-					
+
 					err := g.PlayerAction(game.ActionStand)
 					if err != nil {
 						fmt.Printf("Error: %v\n", err)
@@ -186,7 +185,7 @@ func main() {
 					fmt.Println()
 					fmt.Println(game.RenderState(g, true))
 					fmt.Println()
-					
+
 					err := g.PlayerAction(game.ActionStand)
 					if err != nil {
 						fmt.Printf("Error: %v\n", err)
