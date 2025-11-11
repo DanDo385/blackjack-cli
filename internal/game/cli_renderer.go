@@ -69,8 +69,31 @@ func RenderState(g *Game, hideDealerHole bool) string {
 	return sb.String()
 }
 
+// RenderCurrentHand displays information about the hand currently being played
+func RenderCurrentHand(g *Game) string {
+	if g.ActiveHandIndex >= len(g.PlayerHands) {
+		return ""
+	}
+
+	hand := g.PlayerHands[g.ActiveHandIndex]
+	totalHands := len(g.PlayerHands)
+	handNum := g.ActiveHandIndex + 1
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Playing Hand %d of %d\n", handNum, totalHands))
+	sb.WriteString(fmt.Sprintf("Current cards: %s\n", hand.String()))
+	
+	if hand.IsBust() {
+		sb.WriteString("Current hand value: BUST")
+	} else {
+		sb.WriteString(fmt.Sprintf("Current hand value: %d", hand.Value()))
+	}
+
+	return sb.String()
+}
+
 // RenderAvailableActions renders the available actions for the current hand
-func RenderAvailableActions(actions []Action) string {
+func RenderAvailableActions(actions []Action, handNum int, totalHands int) string {
 	if len(actions) == 0 {
 		return ""
 	}
@@ -91,6 +114,9 @@ func RenderAvailableActions(actions []Action) string {
 		}
 	}
 
+	if totalHands > 1 {
+		return fmt.Sprintf("Action for Hand %d: %s", handNum, strings.Join(actionStrs, ", "))
+	}
 	return "Action: " + strings.Join(actionStrs, ", ")
 }
 

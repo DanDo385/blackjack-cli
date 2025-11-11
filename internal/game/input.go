@@ -40,11 +40,11 @@ func PromptBet(reader io.Reader, bank int) (int, error) {
 }
 
 // PromptAction prompts the user for an action
-func PromptAction(reader io.Reader, actions []Action) (Action, error) {
+func PromptAction(reader io.Reader, actions []Action, handNum int, totalHands int) (Action, error) {
 	scanner := bufio.NewScanner(reader)
 
 	for {
-		fmt.Print(RenderAvailableActions(actions) + ": ")
+		fmt.Print(RenderAvailableActions(actions, handNum, totalHands) + ": ")
 		if !scanner.Scan() {
 			return 0, fmt.Errorf("failed to read input")
 		}

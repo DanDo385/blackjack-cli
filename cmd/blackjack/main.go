@@ -24,20 +24,21 @@ func main() {
 			continue
 		}
 
-		// Start hand
+		// Start hand (bet is validated but not yet deducted)
 		err = g.StartHand(bet)
 		if err != nil {
 			fmt.Printf("Error starting hand: %v\n", err)
 			continue
 		}
 
-		// Deduct the bet
-		g.Bank -= bet
-
 		// Show initial state
 		fmt.Println()
 		fmt.Println(game.RenderState(g, true))
 		fmt.Println()
+
+		// Deduct the bet after showing the initial state
+		// This allows the doubling check to see the full bank balance
+		g.Bank -= bet
 
 	
 		// Insurance phase
@@ -118,69 +119,139 @@ func main() {
 			}
 		}
 
-		// Player action phase
+		// Player action phase - play each hand independently
 		for g.CurrentPhase == game.PhasePlayerAction {
 			currentHand := g.GetCurrentHand()
 			if currentHand == nil {
 				break
 			}
 
-			// Check if hand is automatically done (split aces with one card dealt)
-			if currentHand.IsSplitAces && len(currentHand.Cards) > 1 {
+			// Capture the current hand index at the start of this iteration
+			currentHandIndex := g.ActiveHandIndex
+			handNum := currentHandIndex + 1
+			totalHands := len(g.PlayerHands)
+
+			// Display current hand info
+			fmt.Println()
+			fmt.Println(game.RenderCurrentHand(g))
+			fmt.Println()
+
+			// Handle split aces - they only get one card and then move on
+			if currentHand.IsSplitAces {
+				// Split aces already have their one card dealt during split
+				// Just show the result and advance
 				fmt.Println("Split aces receive only one card.")
+				fmt.Println()
+				fmt.Println(game.RenderState(g, true))
+				fmt.Println()
+				
+				// Advance to next hand
 				err := g.PlayerAction(game.ActionStand)
 				if err != nil {
 					fmt.Printf("Error: %v\n", err)
 					break
 				}
-				fmt.Println()
-				fmt.Println(game.RenderState(g, true))
-				fmt.Println()
 				continue
 			}
 
-			// Check if hand is bust
-			if currentHand.IsBust() {
-				fmt.Println("BUST!")
-				err := g.PlayerAction(game.ActionStand)
-				if err != nil {
-					fmt.Printf("Error: %v\n", err)
+			// Play this hand until it's done (stand, bust, double, or surrender)
+			// Continue as long as we're still on the same hand index
+			for g.CurrentPhase == game.PhasePlayerAction && g.ActiveHandIndex == currentHandIndex {
+				// Refresh current hand reference
+				currentHand = g.GetCurrentHand()
+				if currentHand == nil {
 					break
 				}
+
+				// Refresh total hands count in case we split
+				totalHands = len(g.PlayerHands)
+
+				// Check if hand is bust
+				if currentHand.IsBust() {
+					fmt.Println("💥 BUST!")
+					fmt.Println()
+					fmt.Println(game.RenderState(g, true))
+					fmt.Println()
+					
+					err := g.PlayerAction(game.ActionStand)
+					if err != nil {
+						fmt.Printf("Error: %v\n", err)
+						break
+					}
+					break
+				}
+
+				// Check if hand is 21 (auto-stand)
+				if currentHand.Value() == 21 {
+					fmt.Println()
+					fmt.Println(game.RenderState(g, true))
+					fmt.Println()
+					
+					err := g.PlayerAction(game.ActionStand)
+					if err != nil {
+						fmt.Printf("Error: %v\n", err)
+						break
+					}
+					break
+				}
+
+				// Get available actions
+				actions := g.GetAvailableActions()
+				if len(actions) == 0 {
+					break
+				}
+
+				// Show board state
+				fmt.Println(game.RenderState(g, true))
+				fmt.Println()
+
+				// Prompt for action
+				action, err := game.PromptAction(os.Stdin, actions, handNum, totalHands)
+				if err != nil {
+					fmt.Printf("Error reading action: %v\n", err)
+					continue
+				}
+
+				// Perform action
+				err = g.PlayerAction(action)
+				if err != nil {
+					fmt.Printf("Error performing action: %v\n", err)
+					continue
+				}
+
+				// Show board after action
 				fmt.Println()
 				fmt.Println(game.RenderState(g, true))
 				fmt.Println()
-				continue
-			}
 
-			// Get available actions
-			actions := g.GetAvailableActions()
-			if len(actions) == 0 {
-				break
-			}
+				// Show result of action
+				currentHand = g.GetCurrentHand()
+				if currentHand != nil {
+					if action == game.ActionHit && currentHand.IsBust() {
+						fmt.Println("💥 BUST!")
+					} else if action == game.ActionDouble {
+						// Double ends the hand, show result
+						if currentHand.IsBust() {
+							fmt.Println("💥 BUST!")
+						}
+					} else if action == game.ActionSurrender {
+						fmt.Println("Hand surrendered.")
+					}
+				}
 
-			// Prompt for action
-			action, err := game.PromptAction(os.Stdin, actions)
-			if err != nil {
-				fmt.Printf("Error reading action: %v\n", err)
-				continue
-			}
+				// If action was stand, double, or surrender, the hand is done
+				// (advanceToNextHand was called, so we break out of inner loop)
+				if action == game.ActionStand || action == game.ActionDouble || action == game.ActionSurrender {
+					break
+				}
 
-			// Perform action
-			err = g.PlayerAction(action)
-			if err != nil {
-				fmt.Printf("Error performing action: %v\n", err)
-				continue
-			}
-
-			// Show board after action
-			fmt.Println()
-			fmt.Println(game.RenderState(g, true))
-			fmt.Println()
-
-			// Show result of action (bust)
-			if action == game.ActionHit && currentHand.IsBust() {
-				fmt.Println("💥 BUST!")
+				// If we split, we continue playing the current hand (first split hand)
+				// Refresh the display for the next iteration
+				if action == game.ActionSplit {
+					fmt.Println()
+					fmt.Println(game.RenderCurrentHand(g))
+					fmt.Println()
+				}
 			}
 		}
 

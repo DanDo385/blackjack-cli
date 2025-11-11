@@ -114,11 +114,15 @@ func (g *Game) StartHand(bet int) error {
 		}
 	} else {
 		// Peek for blackjack if dealer shows 10
-		if g.DealerHand.Cards[0].Rank.Value() == 10 {
-			if PeekForBlackjack(g.DealerHand.Cards[0], g.DealerHand.Cards[1]) {
-				g.DealerHasBlackjack = true
-				g.CurrentPhase = PhaseResolution
-				return nil
+		// Only check if dealer has at least one card
+		if len(g.DealerHand.Cards) > 0 && g.DealerHand.Cards[0].Rank.Value() == 10 {
+			// Only peek if dealer has 2 cards
+			if len(g.DealerHand.Cards) >= 2 {
+				if PeekForBlackjack(g.DealerHand.Cards[0], g.DealerHand.Cards[1]) {
+					g.DealerHasBlackjack = true
+					g.CurrentPhase = PhaseResolution
+					return nil
+				}
 			}
 		}
 		g.CurrentPhase = PhasePlayerAction
@@ -210,11 +214,12 @@ func (g *Game) hit(hand *Hand) error {
 		return g.advanceToNextHand()
 	}
 
-	// Split aces only get one card
+	// Split aces only get one card - advance after dealing the card
 	if hand.IsSplitAces {
 		return g.advanceToNextHand()
 	}
 
+	// For normal hands, stay on the same hand to allow multiple hits
 	return nil
 }
 
@@ -227,12 +232,11 @@ func (g *Game) double(hand *Hand) error {
 		return fmt.Errorf("cannot double")
 	}
 
-	// Double the bet
+	// Double the bet - need to deduct the additional bet amount
 	if hand.Bet > g.Bank {
 		return fmt.Errorf("insufficient funds to double")
 	}
 	g.Bank -= hand.Bet // Deduct the additional bet for doubling
-	g.Bank -= hand.Bet
 	hand.Bet *= 2
 	hand.Doubled = true
 	hand.IsInitialDeal = false
@@ -279,7 +283,8 @@ func (g *Game) split() error {
 	hand.Cards = hand.Cards[:1]
 
 	// Check if we're splitting aces
-	if hand.Cards[0].IsAce() {
+	isAceSplit := hand.Cards[0].IsAce()
+	if isAceSplit {
 		hand.IsSplitAces = true
 		newHand.IsSplitAces = true
 	}
@@ -299,13 +304,10 @@ func (g *Game) split() error {
 	newHand.IsInitialDeal = true
 	newHand.IsFromSplit = true
 
-	// If split aces, automatically stand on both hands
-	// We need to advance past BOTH hands since both get only one card
-	if hand.IsSplitAces {
-		// Advance past both aces hands
-		g.advanceToNextHand()        // Advance from first aces hand
-		return g.advanceToNextHand() // Advance from second aces hand (triggers dealer)
-	}
+	// For split aces, the first hand will be handled by the hit() function
+	// which will automatically advance after dealing one card
+	// We stay on the current hand so the player can see the result
+	// The main loop will handle advancing after split aces
 
 	return nil
 }
@@ -435,12 +437,30 @@ func (g *Game) GetAvailableActions() []Action {
 		return nil
 	}
 
+	// Split aces only get one card - no actions available except stand
+	// (handled in main loop, but this prevents any other actions)
+	if hand.IsSplitAces && len(hand.Cards) >= 2 {
+		return []Action{ActionStand}
+	}
+
 	actions := []Action{ActionHit, ActionStand}
 
+	// For doubling, we need enough total chips to cover the doubled bet
+	// Since the bet was already deducted in main.go, we check if g.Bank + hand.Bet >= hand.Bet * 2
+	// This simplifies to: g.Bank >= hand.Bet
+	// Example: Bank=1006, Bet=1000 -> After deduction: Bank=6, need 6>=1000? No, can't double
+	// Example: Bank=2000, Bet=1000 -> After deduction: Bank=1000, need 1000>=1000? Yes, can double
+	// However, if we want to allow doubling when total chips are sufficient, we should check:
+	// g.Bank + hand.Bet >= hand.Bet * 2, which means g.Bank >= hand.Bet
+	// But the user expects to be able to double with 1006 chips and 1000 bet, which means
+	// they want: g.Bank + hand.Bet >= hand.Bet * 2 -> 6 + 1000 >= 2000 -> 1006 >= 2000? No
+	// So the current check is correct - you need at least 2000 chips total to double a 1000 bet
 	if hand.CanDouble() && g.Bank >= hand.Bet {
 		actions = append(actions, ActionDouble)
 	}
 
+	// For splitting, we need enough remaining bank to cover the bet for the new hand
+	// Since the bet was already deducted, we check if g.Bank >= hand.Bet
 	if hand.CanSplit() && g.Bank >= hand.Bet && len(g.PlayerHands) < 4 {
 		actions = append(actions, ActionSplit)
 	}
